@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-picker-element@latest/dist/emoji-picker-element.css">
+    
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 500px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .chat-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #075e54;
+            color: #fff;
+            padding: 15px;
+        }
+
+        .chat-header h1 {
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .typing-indicator {
+            font-size: 19px;
+            color: green;
+            padding: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        .chat__item__container {
+            padding: 20px;
+            background-color: #f9f9f9;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .chat-input-container {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+        }
+
+        #id_message_send_input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        #id_message_send_button {
+            padding: 10px 20px;
+            background-color: #075e54;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        #id_message_send_button i {
+            margin-left: 5px;
+        }
+
+        #id_message_send_button:hover {
+            background-color: #064d44;
+        }
+
+        .chat-message {
+            padding: 10px 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            position: relative;
+            max-width: 80%;
+            clear: both;
+        }
+
+        .chat-message.right {
+            background-color: #dcf8c6;
+            margin-left: auto;
+        }
+
+        .chat-message.left {
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-username {
+            font-size: 12px;
+            color: #075e54;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .message-text {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .message-timestamp {
+            font-size: 10px;
+            color: #999;
+            text-align: right;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>GupShup <i class="fas fa-comment"></i></h1>
+            <div class="typing-indicator" id="id_typing_indicator">Typing...</div>
+        </div>
+        <div class="chat__item__container" id="id_chat_item_container">
+            <!-- Messages will be displayed here with a scrollbar -->
+        </div>
+        <div class="chat-input-container">
+            <input type="text" id="id_message_send_input" placeholder="Type your message..." />
+            <button type="submit" id="id_message_send_button">Send <i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+    <script>
+        const chatSocket = new WebSocket("ws://" + window.location.host + "/");
+    
+        chatSocket.onopen = function (e) {
+            console.log("The connection was set up successfully!");
+        };
+    
+        chatSocket.onclose = function (e) {
+            console.log("Something unexpected happened!");
+        };
+    
+        let typingTimer;
+        const typingInterval = 1000; // Time in milliseconds (1 second)
+    
+        document.querySelector("#id_message_send_input").oninput = function () {
+            chatSocket.send(JSON.stringify({
+                typing: true,
+                username: "{{ request.user.username }}"
+            }));
+    
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                chatSocket.send(JSON.stringify({
+                    typing: false,
+                    username: "{{ request.user.username }}"
+                }));
+            }, typingInterval);
+        };
+    
+        document.querySelector("#id_message_send_button").onclick = function () {
+            var messageInput = document.querySelector("#id_message_send_input").value;
+            var currentTime = new Date();
+            var time = currentTime.toLocaleTimeString();
+            chatSocket.send(JSON.stringify({
+                message: messageInput,
+                username: "{{ request.user.username }}",
+                time: time,
+                typing: false
+            }));
+            document.querySelector("#id_message_send_input").value = "";
+        };
+    
+        chatSocket.onmessage = function (e) {
+            const data = JSON.parse(e.data);
+            var messageContainer = document.querySelector("#id_chat_item_container");
+            var typingIndicator = document.querySelector("#id_typing_indicator");
+    
+            if (data.typing !== undefined) {
+                typingIndicator.style.display = data.typing ? "block" : "none";
+            } else {
+                var div = document.createElement("div");
+                div.className = (data.username === "{{ request.user.username }}") ? "chat-message right" : "chat-message left";
+                div.innerHTML = `<div class="message-content">
+                    <span class="message-username">${data.username.charAt(0).toUpperCase() + data.username.slice(1)}</span>
+                    <span class="message-text">${data.message}</span>
+                    <span class="message-timestamp">${data.time}</span>
+                </div>`;
+                messageContainer.appendChild(div);
+                // Scroll to the bottom of the chat container
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }
+    
+            if (data.sound) {
+                const audio = new Audio(data.sound);
+                audio.play().catch(error => {
+                    console.error('Error playing sound:', error);
+                });
+            }
+        };
+    </script>
+    
+    
+    <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@latest/dist/emoji-picker-element.min.js"></script>
+</body>
+
+</html>
